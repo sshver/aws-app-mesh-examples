@@ -9,13 +9,13 @@ Parameters:
     Type: String
     Description: Envoy container image
 
-  ColorTellerImage:
+  ColorTellerBackendImage:
     Type: String
-    Description: Color Teller container image
+    Description: Color Teller Backend container image
 
-  ColorGatewayImage:
+  ColorTellerFrontendImage:
     Type: String
-    Description: Color Gateway container image
+    Description: Color Teller Frontend container image
 
   LaunchType:
     Type: String
@@ -85,10 +85,10 @@ Resources:
         Fn::ImportValue:
           !Sub "${AWS::StackName}-vpc:VPC"
 
-  ColorTellerServiceRegistry:
+  ColorTellerBackendServiceRegistry:
     Type: AWS::ServiceDiscovery::Service
     Properties:
-      Name: 'colorteller'
+      Name: 'colortellerbackend'
       DnsConfig:
         NamespaceId: !GetAtt 'CloudMapNamespace.Id'
         DnsRecords:
@@ -97,10 +97,10 @@ Resources:
       HealthCheckCustomConfig:
         FailureThreshold: 1
 
-  ColorGatewayServiceRegistry:
+  ColorTellerFrontendServiceRegistry:
     Type: AWS::ServiceDiscovery::Service
     Properties:
-      Name: 'colorgateway'
+      Name: 'colortellerfrontend'
       DnsConfig:
         NamespaceId: !GetAtt 'CloudMapNamespace.Id'
         DnsRecords:
@@ -180,12 +180,12 @@ Resources:
       ListenerArn: !Ref PublicLoadBalancerListener
       Priority: 1
 
-  ColorGatewayTaskDefinition:
+  ColorTellerFrontendTaskDefinition:
     Type: AWS::ECS::TaskDefinition
     Properties:
       RequiresCompatibilities:
       - !Ref LaunchType
-      Family: 'colorgateway'
+      Family: 'colortellerfrontend'
       NetworkMode: 'awsvpc'
       Cpu: 256
       Memory: 512
@@ -207,7 +207,7 @@ Resources:
           Value: '169.254.170.2,169.254.169.254'
       ContainerDefinitions:
       - Name: 'app'
-        Image: !Ref ColorGatewayImage
+        Image: !Ref ColorTellerFrontendImage
         Essential: true
         DependsOn:
         - ContainerName: "envoy"
@@ -217,7 +217,7 @@ Resources:
           Options:
             awslogs-group: !Sub '${AWS::StackName}-log-group'
             awslogs-region: !Ref AWS::Region
-            awslogs-stream-prefix: 'colorgateway'
+            awslogs-stream-prefix: 'colortellerfrontend'
         PortMappings:
         - ContainerPort: 9080
           Protocol: 'tcp'
@@ -225,7 +225,7 @@ Resources:
         - Name: "SERVER_PORT"
           Value: "9080"
         - Name: "COLOR_TELLER_ENDPOINT"
-          Value: !Sub "colorteller.${AWS::StackName}-mesh.local:9080"
+          Value: !Sub "colortellerbackend.${AWS::StackName}-mesh.local:9080"
         - Name: "TCP_ECHO_ENDPOINT"
           Value: ""
         - Name: "STAGE"
@@ -257,10 +257,10 @@ Resources:
           Options:
             awslogs-group: !Sub '${AWS::StackName}-log-group'
             awslogs-region: !Ref AWS::Region
-            awslogs-stream-prefix: 'colorgateway'
+            awslogs-stream-prefix: 'colortellerfrontend'
         Environment:
         - Name: 'APPMESH_VIRTUAL_NODE_NAME'
-          Value: !Sub 'mesh/${AWS::StackName}-mesh/virtualNode/colorgateway-node'
+          Value: !Sub 'mesh/${AWS::StackName}-mesh/virtualNode/colortellerfrontend-node'
         - Name: 'ENVOY_LOG_LEVEL'
           Value: 'debug'
 
@@ -291,7 +291,7 @@ Resources:
           Value: '169.254.170.2,169.254.169.254'
       ContainerDefinitions:
       - Name: 'app'
-        Image: !Ref ColorTellerImage
+        Image: !Ref ColorTellerBackendImage
         Essential: true
         DependsOn:
         - ContainerName: "envoy"
@@ -373,7 +373,7 @@ Resources:
           Value: '169.254.170.2,169.254.169.254'
       ContainerDefinitions:
       - Name: 'app'
-        Image: !Ref ColorTellerImage
+        Image: !Ref ColorTellerBackendImage
         Essential: true
         DependsOn:
         - ContainerName: "envoy"
@@ -428,7 +428,7 @@ Resources:
         - Name: 'ENVOY_LOG_LEVEL'
           Value: 'debug'
 
-  ColorGatewayService:
+  ColorTellerFrontendService:
     Type: AWS::ECS::Service
     DependsOn:
     - WebLoadBalancerRule
@@ -440,7 +440,7 @@ Resources:
       DesiredCount: 1
       LaunchType: !Ref LaunchType
       ServiceRegistries:
-      - RegistryArn: !GetAtt 'ColorGatewayServiceRegistry.Arn'
+      - RegistryArn: !GetAtt 'ColorTellerFrontendServiceRegistry.Arn'
       NetworkConfiguration:
         AwsvpcConfiguration:
           AssignPublicIp: DISABLED
@@ -451,7 +451,7 @@ Resources:
               !Sub '${AWS::StackName}-vpc:PrivateSubnet1'
           - Fn::ImportValue:
               !Sub '${AWS::StackName}-vpc:PrivateSubnet2'
-      TaskDefinition: !Ref ColorGatewayTaskDefinition
+      TaskDefinition: !Ref ColorTellerFrontendTaskDefinition
       LoadBalancers:
       - ContainerName: app
         ContainerPort: 9080
@@ -467,7 +467,7 @@ Resources:
       DesiredCount: 1
       LaunchType: !Ref LaunchType
       ServiceRegistries:
-      - RegistryArn: !GetAtt 'ColorTellerServiceRegistry.Arn'
+      - RegistryArn: !GetAtt 'ColorTellerBackendServiceRegistry.Arn'
       NetworkConfiguration:
         AwsvpcConfiguration:
           AssignPublicIp: DISABLED
@@ -490,7 +490,7 @@ Resources:
       DesiredCount: 1
       LaunchType: !Ref LaunchType
       ServiceRegistries:
-      - RegistryArn: !GetAtt 'ColorTellerServiceRegistry.Arn'
+      - RegistryArn: !GetAtt 'ColorTellerBackendServiceRegistry.Arn'
       NetworkConfiguration:
         AwsvpcConfiguration:
           AssignPublicIp: DISABLED
@@ -504,8 +504,8 @@ Resources:
       TaskDefinition: !Ref GreenColorTellerTaskDefinition
 
 Outputs:
-  ColorGatewayEndpoint:
-    Description: 'Public endpoint for Color Gateway service'
+  ColorTellerFrontendEndpoint:
+    Description: 'Public endpoint for Color Teller Frontend service'
     Value: !Join ['', ['http://', !GetAtt 'PublicLoadBalancer.DNSName']]
     Export:
-      Name: !Sub '${AWS::StackName}:ColorGatewayEndpoint'
+      Name: !Sub '${AWS::StackName}:ColorTellerFrontendEndpoint'
