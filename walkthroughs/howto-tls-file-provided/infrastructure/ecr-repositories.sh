@@ -11,5 +11,5 @@ aws --profile "${AWS_PROFILE}" --region "${AWS_DEFAULT_REGION}" \
     --template-file "${DIR}/ecr-repositories.yaml" \
     --parameter-overrides \
     FrontendImageName="${FRONTEND_IMAGE_NAME}" \
-    ColorTellerImageName="${BACKEND_IMAGE_NAME}" \
+    ColorTellerImageName="${COLOR_TELLER_IMAGE_NAME}" \
     ColorAppEnvoyImageName="${COLOR_APP_ENVOY_IMAGE_NAME}"

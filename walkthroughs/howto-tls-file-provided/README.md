@@ -25,7 +25,7 @@ export MESH_NAME="ColorApp-TLS"
 export ENVOY_IMAGE=<get the latest from https://docs.aws.amazon.com/app-mesh/latest/userguide/envoy.html>
 export SERVICES_DOMAIN="default.svc.cluster.local"
 export FRONTEND_IMAGE_NAME="frontend"
-export BACKEND_IMAGE_NAME="colorteller"
+export COLOR_TELLER_IMAGE_NAME="colorteller"
 export COLOR_APP_ENVOY_IMAGE_NAME="colorapp-envoy"
 ```
 
@@ -291,7 +291,7 @@ Run the following commands to clean up and tear down the resources that we’ve 
 ```bash
 aws cloudformation delete-stack --stack-name $ENVIRONMENT_NAME-ecs-service
 aws cloudformation delete-stack --stack-name $ENVIRONMENT_NAME-ecs-cluster
-aws ecr delete-repository --force --repository-name $BACKEND_IMAGE_NAME
+aws ecr delete-repository --force --repository-name $COLOR_TELLER_IMAGE_NAME
 aws ecr delete-repository --force --repository-name $FRONTEND_IMAGE_NAME
 aws ecr delete-repository --force --repository-name $COLOR_APP_ENVOY_IMAGE_NAME
 aws cloudformation delete-stack --stack-name $ENVIRONMENT_NAME-ecr-repositories
