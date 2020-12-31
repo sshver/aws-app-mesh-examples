@@ -19,8 +19,8 @@ fi
 
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null && pwd )"
 APP_DIR="${DIR}/../../examples/apps/colorapp"
-COLOR_GATEWAY_IMAGE=${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com/gateway
-COLOR_TELLER_IMAGE=${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com/colorteller
+COLOR_TELLER_FRONTEND_IMAGE=${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com/gateway
+COLOR_TELLER_BACKEND_IMAGE=${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com/colorteller
 
 deploy_vpc() {
     aws cloudformation deploy \
@@ -44,7 +44,7 @@ deploy_app() {
         --stack-name "${RESOURCE_PREFIX}" \
         --template-file "${DIR}/app.yaml" \
         --capabilities CAPABILITY_IAM \
-        --parameter-overrides "EnvoyImage=${ENVOY_IMAGE}" "ColorTellerImage=${COLOR_TELLER_IMAGE}" "ColorGatewayImage=${COLOR_GATEWAY_IMAGE}"
+        --parameter-overrides "EnvoyImage=${ENVOY_IMAGE}" "ColorTellerBackendImage=${COLOR_TELLER_BACKEND_IMAGE}" "ColorTellerFrontendImage=${COLOR_TELLER_FRONTEND_IMAGE}"
 }
 
 confirm_service_linked_role() {
@@ -57,7 +57,7 @@ print_endpoint() {
     echo "Public endpoint:"
     prefix=$( aws cloudformation describe-stacks \
         --stack-name="${RESOURCE_PREFIX}" \
-        --query="Stacks[0].Outputs[?OutputKey=='ColorGatewayEndpoint'].OutputValue" \
+        --query="Stacks[0].Outputs[?OutputKey=='ColorTellerFrontendEndpoint'].OutputValue" \
         --output=text )
     echo "${prefix}/color"
 }

@@ -15,7 +15,7 @@ Resources:
       Spec:
         ServiceDiscovery:
           AWSCloudMap:
-            ServiceName: "colorteller"
+            ServiceName: "colortellerbackend"
             NamespaceName: !Sub "${AWS::StackName}.local"
             Attributes:
             - Key: "ECS_TASK_DEFINITION_FAMILY"
@@ -42,7 +42,7 @@ Resources:
       Spec:
         ServiceDiscovery:
           AWSCloudMap:
-            ServiceName: "colorteller"
+            ServiceName: "colortellerbackend"
             NamespaceName: !Sub "${AWS::StackName}.local"
             Attributes:
             - Key: "ECS_TASK_DEFINITION_FAMILY"
@@ -59,18 +59,18 @@ Resources:
             TimeoutMillis: 2000
             IntervalMillis: 5000
   
-  ColorGatewayNode:
+  ColorTellerFrontendNode:
     Type: AWS::AppMesh::VirtualNode
     DependsOn:
-    - ColorTellerService
+    - ColorTellerBackendService
     Properties:
       MeshName: !Ref AWS::StackName
-      VirtualNodeName: "colorgateway-node"
+      VirtualNodeName: "colortellerfrontend-node"
       Spec:
         ServiceDiscovery:
           AWSCloudMap:
             NamespaceName: !Sub "${AWS::StackName}.local"
-            ServiceName: "colorgateway"
+            ServiceName: "colortellerfrontend"
         Listeners:
         - PortMapping:
             Port: 9080
@@ -84,15 +84,15 @@ Resources:
             IntervalMillis: 5000
         Backends:
         - VirtualService:
-            VirtualServiceName: !Sub "colorteller.${AWS::StackName}.local"
+            VirtualServiceName: !Sub "colortellerbackend.${AWS::StackName}.local"
 
-  ColorTellerService:
+  ColorTellerBackendService:
     Type: AWS::AppMesh::VirtualService
     DependsOn:
     - ColorTellerRouter
     Properties:
       MeshName: !Ref AWS::StackName
-      VirtualServiceName: !Sub "colorteller.${AWS::StackName}.local"
+      VirtualServiceName: !Sub "colortellerbackend.${AWS::StackName}.local"
       Spec:
         Provider:
           VirtualRouter:
