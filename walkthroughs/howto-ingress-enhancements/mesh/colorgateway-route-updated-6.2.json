@@ -1,0 +1,17 @@
+{
+    "spec": {
+        "priority": 1,
+        "httpRoute" : {
+            "match" : {
+                "prefix" : "/color"
+            },
+            "action" : {
+                "target" : {
+                    "virtualService": {
+                        "virtualServiceName": $VIRTUALSERVICE_NAME
+                    }
+                }
+            }
+        }
+    }
+}

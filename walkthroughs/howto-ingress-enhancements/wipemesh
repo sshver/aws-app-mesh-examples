@@ -1,0 +1,144 @@
+#!/usr/bin/env python3
+
+import sys, subprocess, json, argparse, time
+
+WELL_KNOWN_ENDPOINTS = {
+  'beta': 'https://frontend.us-west-2.beta.lattice.aws.a2z.com',
+  'gamma': 'https://frontend.us-west-2.gamma.lattice.aws.a2z.com'
+}
+
+parser = argparse.ArgumentParser(description='Recursively delete Meshes',
+epilog='''
+examples:
+  wipemesh # display meshes and select one to delete
+
+  wipemesh --mesh-name between-regions --region eu-central-1
+
+  yes | wipemesh --all # wipe all meshes
+
+  wipemesh --profile lattice-canary --all # wipe all meshes for the given profile
+
+  wipemesh --mesh-name developer-environment --endpoint-url http://localhost:8080
+''',
+formatter_class=argparse.RawDescriptionHelpFormatter)
+parser.add_argument('--profile', type=str, help='AWS profile to use, if unspecified, it will use your default profile or whatever is set in AWS_PROFILE preferring the latter')
+parser.add_argument('--mesh-name', type=str, help='name of mesh to delete, if unspecified a listing of meshes will be displayed')
+parser.add_argument('--mesh-owner', type=str, help='owner of meshes to ask for deletion')
+parser.add_argument('--service-name', type=str, default='appmesh', help='service name to delete from (default: appmesh)')
+
+group = parser.add_mutually_exclusive_group()
+group.add_argument('--endpoint-url', type=str, help='http endpoint to delete meshes from (default: production endpoint)')
+group.add_argument('--stage', type=str, choices=['beta', 'gamma'], help='short-hand for specifying the beta or gamma appmesh endpoint-url')
+
+parser.add_argument('--region', type=str, help='region to delete meshes in (default: awscli default region)')
+parser.add_argument('--all', action='store_true', default=False, help='skip mesh selection and delete all meshes')
+parser.add_argument('--details', action='store_true', default=False, help='Outputs mesh metadata before deletion')
+parser.add_argument('--resource-suffixes', type=str, nargs='*', help='List of resource suffixes to skip while deleting')
+parse_args = parser.parse_args()
+
+def appmesh(command, *args):
+  line = ['aws', parse_args.service_name]
+  if parse_args.profile is not None:
+    line.extend(['--profile', parse_args.profile])
+  if parse_args.endpoint_url is not None:
+    line.extend(['--endpoint-url', parse_args.endpoint_url])
+  if parse_args.stage is not None:
+    line.extend(['--endpoint-url', WELL_KNOWN_ENDPOINTS[parse_args.stage]])
+  if parse_args.region is not None:
+    line.extend(['--region', parse_args.region])
+  line.extend([command])
+  line.extend(args)
+  output = subprocess.check_output(line)
+  if isinstance(output, bytes):
+    output = str(output, encoding='utf-8')
+  return json.loads(output)
+
+def filterForMeshOwner(mesh):
+  if mesh['meshOwner'] == parse_args.mesh_owner:
+    return True
+  else:
+    print('mesh {} is owned by {}. Skipping...'.format(mesh['meshName'], mesh['meshOwner']))
+    return False
+
+meshes = appmesh('list-meshes')['meshes']
+
+if parse_args.mesh_owner is not None:
+  meshes = list(filter(filterForMeshOwner, meshes))
+
+if len(meshes) == 0:
+  print('No meshes found. exiting.')
+  sys.exit(1)
+
+if parse_args.mesh_name is None:
+  if not parse_args.all:
+    for i, mesh in enumerate(meshes):
+      print('{}: {}'.format(i, mesh['arn']))
+  
+    index = int(input('Completely wipe out which mesh?:'))
+
+    if index not in range(len(meshes)):
+      print('{} is not in the list. exiting.'.format(index))
+      sys.exit(1)
+
+    meshes = [meshes[index]]
+
+else:
+  try:
+    index = list(map(lambda mesh: mesh['meshName'], meshes)).index(parse_args.mesh_name)
+  except ValueError:
+    print('{} does not exist. exiting.'.format(parse_args.mesh_name))
+    sys.exit(1)
+
+  meshes = [meshes[index]]
+
+def convert_time(t):
+  return time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(t))
+
+for mesh in meshes:
+  mesh_name = mesh['meshName']
+  if parse_args.details:
+    mesh_metadata = appmesh('describe-mesh', '--mesh-name', mesh_name)['mesh']['metadata']
+    print('arn="{}"'.format(mesh_metadata['arn']))
+    print('  createdAt="{}" ({})'.format(mesh_metadata['createdAt'], convert_time(mesh_metadata['createdAt'])))
+    print('  lastUpdatedAt="{}" ({})'.format(mesh_metadata['lastUpdatedAt'], convert_time(mesh_metadata['lastUpdatedAt'])))
+    print('  uid="{}"'.format(mesh_metadata['uid']))
+    print('  version="{}"'.format(mesh_metadata['version']))
+
+  if parse_args.resource_suffixes is not None:
+    if mesh_name[-8:] in parse_args.resource_suffixes:
+      print('Mesh {} contains a resource suffix. Skipping...'.format(mesh_name))
+      continue
+
+  resp = input('This will completely destroy "{}" and all of its resources. Are you sure? [y/n/q]'.format(mesh['arn'])).lower()
+  if resp.startswith('n'):
+    print('continuing.')
+    continue
+  elif resp.startswith('q'):
+    print('exiting.')
+    sys.exit(0)
+
+  for virtual_gateway in appmesh('list-virtual-gateways', '--mesh-name', mesh_name)['virtualGateways']:
+    for gatewayRoute in appmesh('list-gateway-routes', '--mesh-name', mesh_name, '--virtual-gateway-name', virtual_gateway['virtualGatewayName'])['gatewayRoutes']:
+      print('Deleting gatewayRoute "{}" in gateway "{}"'.format(gatewayRoute['arn'], virtual_gateway['arn']))
+      appmesh('delete-gateway-route', '--mesh-name', mesh_name, '--virtual-gateway-name', virtual_gateway['virtualGatewayName'], '--gateway-route-name', gatewayRoute['gatewayRouteName'])
+    print('Deleting gateway "{}"'.format(virtual_gateway['arn']))
+    appmesh('delete-virtual-gateway', '--mesh-name', mesh_name, '--virtual-gateway-name', virtual_gateway['virtualGatewayName'])
+
+  for virtual_service in appmesh('list-virtual-services', '--mesh-name', mesh_name)['virtualServices']:
+    print('Deleting service "{}"'.format(virtual_service['arn']))
+    appmesh('delete-virtual-service', '--mesh-name', mesh_name, '--virtual-service-name', virtual_service['virtualServiceName'])
+
+  for virtual_router in appmesh('list-virtual-routers', '--mesh-name', mesh_name)['virtualRouters']:
+    for route in appmesh('list-routes', '--mesh-name', mesh_name, '--virtual-router-name', virtual_router['virtualRouterName'])['routes']:
+      print('Deleting route "{}" in router "{}"'.format(route['arn'], virtual_router['arn']))
+      appmesh('delete-route', '--mesh-name', mesh_name, '--virtual-router-name', virtual_router['virtualRouterName'], '--route-name', route['routeName'])
+    print('Deleting router "{}"'.format(virtual_router['arn']))
+    appmesh('delete-virtual-router', '--mesh-name', mesh_name, '--virtual-router-name', virtual_router['virtualRouterName'])
+
+  for virtual_node in appmesh('list-virtual-nodes', '--mesh-name', mesh_name)['virtualNodes']:
+    print('Deleting node "{}"'.format(virtual_node['arn']))
+    appmesh('delete-virtual-node', '--mesh-name', mesh_name, '--virtual-node-name', virtual_node['virtualNodeName'])
+
+  print('Deleting mesh "{}"'.format(mesh['arn']))
+  appmesh('delete-mesh', '--mesh-name', mesh_name)
+
